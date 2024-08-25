@@ -178,7 +178,7 @@ pip install --upgrade accelerate transformers diffusers huggingface_hub #Optiona
 
 #### Hugging Face:
 - Get a READ token from [here](https://huggingface.co/settings/tokens) and request access to Flux.1-dev model from [here](https://huggingface.co/black-forest-labs/FLUX.1-dev).
-- Run `huggingface-cli login` and paste your token.
+- Add a `.env` in the root directory with `HF_TOKEN=your_token`.
 
 ### 2. Upload your dataset
 - Drag and drop your dataset folder containing the .jpg, .jpeg, or .png images and .txt files in `ai-toolkit`.
