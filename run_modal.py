@@ -70,8 +70,47 @@ image = (
         "sentencepiece",
         "huggingface_hub",
         "peft",
+        "llava",
     )
 )
+
+
+def rename_dataset_files(dataset_path: str) -> None:
+    # rename all files as 1.jpg, 2.jpg, 3.jpg, etc (keep the extension same as original)
+    import os
+    import glob
+    import shutil
+    from tqdm import tqdm
+
+    files = glob.glob(os.path.join(dataset_path, "*"))
+    for i, file in enumerate(tqdm(files)):
+        file_name = os.path.basename(file)
+        file_ext = os.path.splitext(file_name)[1]
+        new_file_name = f"{i+1}{file_ext}"
+        shutil.move(file, os.path.join(dataset_path, new_file_name))
+
+
+def generate_caption(dataset_path: str) -> None:
+    # generate caption and store as same name as image file with .txt extension
+    from extensions_built_in.dataset_tools.tools.llava_utils import LLaVAImageProcessor
+    from PIL import Image
+    import os
+    from tqdm import tqdm
+
+    llava = LLaVAImageProcessor()
+    llava.load_model()
+
+    files = os.listdir(dataset_path)
+    for file in tqdm(files):
+        if not file.endswith(".jpg"):
+            continue
+        image = Image.open(os.path.join(dataset_path, file))
+        caption = llava.generate_caption(image)
+        with open(
+            os.path.join(dataset_path, f"{os.path.splitext(file)[0]}.txt"), "w"
+        ) as f:
+            f.write(caption)
+
 
 # mount for the entire ai-toolkit directory
 # example: "/Users/username/ai-toolkit" is the local directory, "/root/ai-toolkit" is the remote directory
@@ -121,7 +160,7 @@ def print_end_message(jobs_completed, jobs_failed):
 @app.function(
     # request a GPU with at least 24GB VRAM
     # more about modal GPU's: https://modal.com/docs/guide/gpu
-    gpu=modal.gpu.A100(count=1, size="40GB"),  # gpu="H100"
+    gpu="H100",
     # more about modal timeouts: https://modal.com/docs/guide/timeouts
     timeout=7200,  # 2 hours, increase or decrease if needed
     secrets=[
