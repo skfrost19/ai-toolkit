@@ -70,7 +70,6 @@ image = (
         "sentencepiece",
         "huggingface_hub",
         "peft",
-        "llava",
     )
 )
 
@@ -91,25 +90,31 @@ def rename_dataset_files(dataset_path: str) -> None:
 
 
 def generate_caption(dataset_path: str) -> None:
-    # generate caption and store as same name as image file with .txt extension
-    from extensions_built_in.dataset_tools.tools.llava_utils import LLaVAImageProcessor
-    from PIL import Image
     import os
-    from tqdm import tqdm
+    from transformers import pipeline
+    from PIL import Image
 
-    llava = LLaVAImageProcessor()
-    llava.load_model()
+    # Initialize the image captioning model pipeline
+    caption_generator = pipeline(
+        "image-to-text", model="nlpconnect/vit-gpt2-image-captioning"
+    )
 
-    files = os.listdir(dataset_path)
-    for file in tqdm(files):
-        if not file.endswith(".jpg"):
-            continue
-        image = Image.open(os.path.join(dataset_path, file))
-        caption = llava.generate_caption(image)
-        with open(
-            os.path.join(dataset_path, f"{os.path.splitext(file)[0]}.txt"), "w"
-        ) as f:
-            f.write(caption)
+    # Process each image in the directory
+    for filename in os.listdir(dataset_path):
+        if filename.endswith((".jpg", ".jpeg", ".png", ".bmp", ".gif")):
+            image_path = os.path.join(dataset_path, filename)
+
+            # Generate caption
+            caption = caption_generator(image_path)[0]["generated_text"]
+
+            # Save caption to a text file with the same name as the image
+            caption_file_path = os.path.splitext(image_path)[0] + ".txt"
+            with open(caption_file_path, "w") as caption_file:
+                caption_file.write(caption)
+
+            print(
+                f"Caption for {filename} saved to {caption_file_path} with content: {caption}"
+            )
 
 
 # mount for the entire ai-toolkit directory
@@ -185,6 +190,11 @@ def main(config_file_list_str: str, recover: bool = False, name: str = None):
             job.config["process"][0]["training_folder"] = MOUNT_DIR
             os.makedirs(MOUNT_DIR, exist_ok=True)
             print(f"Training outputs will be saved to: {MOUNT_DIR}")
+
+            # rename all files as 1.jpg, 2.jpg, 3.jpg, etc (keep the extension same as original)
+            rename_dataset_files("/root/ai-toolkit/dataset/")
+            # generate caption and store as same name as image file with .txt extension
+            generate_caption("/root/ai-toolkit/dataset/")
 
             # run the job
             job.run()

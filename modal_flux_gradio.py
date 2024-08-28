@@ -54,7 +54,7 @@ image = image.run_function(
 )
 
 
-volume = modal.Volume.from_name("flux-lora-training")
+volume = modal.Volume.from_name("flux-lora-models")
 MODEL_DIR = "/checkpoints"
 
 
@@ -103,7 +103,7 @@ class Model:
 
         # Load LoRA weights from safetensors file
         lora_weights_path = (
-            f"{MODEL_DIR}/flux-lora-training-v1/flux_lora_training_v1.safetensors"
+            f"{MODEL_DIR}/my_first_flux_lora_v1/my_first_flux_lora_v1.safetensors"
         )
         lora_weights = load_file(lora_weights_path)
         pipe.load_lora_weights(lora_weights)
