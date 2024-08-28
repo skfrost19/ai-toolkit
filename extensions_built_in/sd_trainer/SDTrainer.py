@@ -62,6 +62,13 @@ class SDTrainer(BaseSDTrainProcess):
 
         self.is_bfloat = self.train_config.dtype == "bfloat16" or self.train_config.dtype == "bf16"
 
+        self.do_grad_scale = True
+        if self.is_fine_tuning:
+            self.do_grad_scale = False
+        if self.adapter_config is not None:
+            if self.adapter_config.train:
+                self.do_grad_scale = False
+
         if self.train_config.dtype in ["fp16", "float16"]:
             # patch the scaler to allow fp16 training
             org_unscale_grads = self.scaler._unscale_grads_
@@ -831,8 +838,8 @@ class SDTrainer(BaseSDTrainProcess):
             # self.network.multiplier = 0.0
             self.sd.unet.eval()
 
-            if self.adapter is not None and isinstance(self.adapter, IPAdapter):
-                # we need to remove the image embeds from the prompt
+            if self.adapter is not None and isinstance(self.adapter, IPAdapter) and not self.sd.is_flux:
+                # we need to remove the image embeds from the prompt except for flux
                 embeds_to_use: PromptEmbeds = embeds_to_use.clone().detach()
                 end_pos = embeds_to_use.text_embeds.shape[1] - self.adapter_config.num_tokens
                 embeds_to_use.text_embeds = embeds_to_use.text_embeds[:, :end_pos, :]
@@ -1261,7 +1268,7 @@ class SDTrainer(BaseSDTrainProcess):
                         if has_clip_image_embeds:
                             # todo handle reg images better than this
                             if is_reg:
-                                # get unconditional image imbeds from cache
+                                # get unconditional image embeds from cache
                                 embeds = [
                                     load_file(random.choice(batch.clip_image_embeds_unconditional)) for i in
                                     range(noisy_latents.shape[0])
@@ -1346,10 +1353,20 @@ class SDTrainer(BaseSDTrainProcess):
 
                     with self.timer('encode_adapter'):
                         self.adapter.train()
-                        conditional_embeds = self.adapter(conditional_embeds.detach(), conditional_clip_embeds)
+                        conditional_embeds = self.adapter(
+                            conditional_embeds.detach(),
+                            conditional_clip_embeds,
+                            is_unconditional=False
+                        )
                         if self.train_config.do_cfg:
-                            unconditional_embeds = self.adapter(unconditional_embeds.detach(),
-                                                                unconditional_clip_embeds)
+                            unconditional_embeds = self.adapter(
+                                unconditional_embeds.detach(),
+                                unconditional_clip_embeds,
+                                is_unconditional=True
+                            )
+                        else:
+                            # wipe out unconsitional
+                            self.adapter.last_unconditional = None
 
                 if self.adapter and isinstance(self.adapter, ReferenceAdapter):
                     # pass in our scheduler
@@ -1519,7 +1536,7 @@ class SDTrainer(BaseSDTrainProcess):
                     # if self.is_bfloat:
                     # loss.backward()
                     # else:
-                    if self.is_fine_tuning:
+                    if not self.do_grad_scale:
                         loss.backward()
                     else:
                         self.scaler.scale(loss).backward()
@@ -1528,7 +1545,7 @@ class SDTrainer(BaseSDTrainProcess):
         if not self.is_grad_accumulation_step:
             # fix this for multi params
             if self.train_config.optimizer != 'adafactor':
-                if not self.is_fine_tuning:
+                if self.do_grad_scale:
                     self.scaler.unscale_(self.optimizer)
                 if isinstance(self.params[0], dict):
                     for i in range(len(self.params)):
@@ -1538,7 +1555,7 @@ class SDTrainer(BaseSDTrainProcess):
             # only step if we are not accumulating
             with self.timer('optimizer_step'):
                 # self.optimizer.step()
-                if self.is_fine_tuning:
+                if not self.do_grad_scale:
                     self.optimizer.step()
                 else:
                     self.scaler.step(self.optimizer)
