@@ -2,7 +2,7 @@
 
 ostris/ai-toolkit on https://modal.com
 Run training with the following command:
-modal run run_modal.py --config-file-list-str=/root/ai-toolkit/config/whatever_you_want.yml
+modal run run_modal.py --config-file-list-str=/root/ai-toolkit/config/whatever_you_want.yaml
 
 """
 
@@ -12,6 +12,7 @@ os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 import sys
 import modal
 from dotenv import load_dotenv
+import re
 
 # Load the .env file if it exists
 load_dotenv()
@@ -25,7 +26,7 @@ os.environ["DISABLE_TELEMETRY"] = "YES"
 
 # define the volume for storing model outputs, using "creating volumes lazily": https://modal.com/docs/guide/volumes
 # you will find your model, samples and optimizer stored in: https://modal.com/storage/your-username/main/flux-lora-models
-model_volume = modal.Volume.from_name("flux-lora-models", create_if_missing=True)
+modal_volume = modal.Volume.from_name("flux-lora-models", create_if_missing=True)
 
 # modal_output, due to "cannot mount volume on non-empty path" requirement
 MOUNT_DIR = "/root/ai-toolkit/modal_output"  # modal_output, due to "cannot mount volume on non-empty path" requirement
@@ -34,8 +35,9 @@ MOUNT_DIR = "/root/ai-toolkit/modal_output"  # modal_output, due to "cannot moun
 image = (
     modal.Image.debian_slim(python_version="3.11")
     # install required system and pip packages, more about this modal approach: https://modal.com/docs/examples/dreambooth_app
-    .apt_install("libgl1", "libglib2.0-0")
+    .apt_install("libgl1", "libglib2.0-0", "git")
     .pip_install(
+        "ruamel.yaml",
         "python-dotenv",
         "torch",
         "diffusers[torch]",
@@ -91,22 +93,29 @@ def rename_dataset_files(dataset_path: str) -> None:
 
 def generate_caption(dataset_path: str) -> None:
     import os
-    from transformers import pipeline
+    from transformers import BlipProcessor, BlipForConditionalGeneration
     from PIL import Image
 
-    # Initialize the image captioning model pipeline
-    caption_generator = pipeline(
-        "image-to-text", model="nlpconnect/vit-gpt2-image-captioning"
-    )
+    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-large")
+    model = BlipForConditionalGeneration.from_pretrained(
+        "Salesforce/blip-image-captioning-large"
+    ).to("cuda")
+
+    # conditional image captioning
+    text = "a photograph of [trigger], "
 
     # Process each image in the directory
     for filename in os.listdir(dataset_path):
         if filename.endswith((".jpg", ".jpeg", ".png", ".bmp", ".gif")):
             image_path = os.path.join(dataset_path, filename)
 
-            # Generate caption
-            caption = caption_generator(image_path)[0]["generated_text"]
+            # Load the image
+            image = Image.open(image_path)
 
+            inputs = processor(image, text, return_tensors="pt").to("cuda")
+
+            out = model.generate(**inputs)
+            caption = processor.decode(out[0], skip_special_tokens=True)
             # Save caption to a text file with the same name as the image
             caption_file_path = os.path.splitext(image_path)[0] + ".txt"
             with open(caption_file_path, "w") as caption_file:
@@ -120,7 +129,8 @@ def generate_caption(dataset_path: str) -> None:
 # mount for the entire ai-toolkit directory
 # example: "/Users/username/ai-toolkit" is the local directory, "/root/ai-toolkit" is the remote directory
 code_mount = modal.Mount.from_local_dir(
-    "/Users/username/ai-toolkit", remote_path="/root/ai-toolkit"
+    local_path=os.path.abspath(os.path.join(os.path.dirname(__file__))),
+    remote_path="/root/ai-toolkit",
 )
 
 # create the Modal app with the necessary mounts and volumes
@@ -128,7 +138,7 @@ app = modal.App(
     name="flux-lora-training",
     image=image,
     mounts=[code_mount],
-    volumes={MOUNT_DIR: model_volume},
+    volumes={MOUNT_DIR: modal_volume},
 )
 
 # Check if we have DEBUG_TOOLKIT in env
@@ -169,7 +179,7 @@ def print_end_message(jobs_completed, jobs_failed):
     # more about modal timeouts: https://modal.com/docs/guide/timeouts
     timeout=7200,  # 2 hours, increase or decrease if needed
     secrets=[
-        modal.Secret.from_dotenv()
+        modal.Secret.from_dotenv(),
     ],  # Taking secret from .env file: https://modal.com/docs/guide/secrets
 )
 def main(config_file_list_str: str, recover: bool = False, name: str = None):
@@ -200,7 +210,7 @@ def main(config_file_list_str: str, recover: bool = False, name: str = None):
             job.run()
 
             # commit the volume after training
-            model_volume.commit()
+            modal_volume.commit()
 
             job.cleanup()
             jobs_completed += 1
@@ -242,6 +252,8 @@ if __name__ == "__main__":
         help="Name to replace [name] tag in config file, useful for shared config file",
     )
     args = parser.parse_args()
+
+    print(args)
 
     # convert list of config files to a comma-separated string for Modal compatibility
     config_file_list_str = ",".join(args.config_file_list)
