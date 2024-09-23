@@ -2,7 +2,7 @@
 
 ostris/ai-toolkit on https://modal.com
 Run training with the following command:
-modal run run_modal.py --config-file-list-str=/root/ai-toolkit/config/whatever_you_want.yaml
+modal run run_modal.py --config-file-list-str=/root/ai-toolkit/config/modal_lora_config.yaml
 
 """
 
@@ -102,7 +102,7 @@ def generate_caption(dataset_path: str) -> None:
     ).to("cuda")
 
     # conditional image captioning
-    text = "a photograph of [trigger], "
+    text = "a photograph of"
 
     # Process each image in the directory
     for filename in os.listdir(dataset_path):
@@ -179,7 +179,7 @@ def print_end_message(jobs_completed, jobs_failed):
     # more about modal timeouts: https://modal.com/docs/guide/timeouts
     timeout=7200,  # 2 hours, increase or decrease if needed
     secrets=[
-        modal.Secret.from_dotenv(),
+        modal.Secret.from_name("my-huggingface-secret"),
     ],  # Taking secret from .env file: https://modal.com/docs/guide/secrets
 )
 def main(config_file_list_str: str, recover: bool = False, name: str = None):
@@ -252,8 +252,6 @@ if __name__ == "__main__":
         help="Name to replace [name] tag in config file, useful for shared config file",
     )
     args = parser.parse_args()
-
-    print(args)
 
     # convert list of config files to a comma-separated string for Modal compatibility
     config_file_list_str = ",".join(args.config_file_list)

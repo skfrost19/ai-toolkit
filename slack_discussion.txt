@@ -1,0 +1,3 @@
+also if you have containers live you can click the container tab, click one of the containers and copy the container id (something like ta-1232423) you can then enter the container and poke around:
+modal container exec ta-1234321 /bin/bash
+

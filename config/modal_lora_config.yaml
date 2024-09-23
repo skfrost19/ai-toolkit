@@ -1,18 +1,19 @@
 ---
 job: extension
 config:
-  # this name will be the folder and filename name
+  # this name will be the folder and filename name (use trigger_word for unique names)
   name: "my_first_flux_lora_v1"
   process:
     - type: 'sd_trainer'
       # root folder to save training sessions/samples/weights
+      volume_name: "flux-lora-models" # volume name to be created in modal.
       training_folder: "/root/ai-toolkit/modal_output" # must match MOUNT_DIR from run_modal.py
       # uncomment to see performance stats in the terminal every N steps
-#      performance_log_every: 1000
+      #performance_log_every: 1000
       device: cuda:0
       # if a trigger word is specified, it will be added to captions of training data if it does not already exist
       # alternatively, in your captions you can add [trigger] and it will be replaced with the trigger word
-#      trigger_word: "p3r5on"
+      trigger_word: "tomcruise"
       network:
         type: "lora"
         linear: 16
@@ -36,7 +37,7 @@ config:
           resolution: [ 512, 768, 1024 ]  # flux enjoys multiple resolutions
       train:
         batch_size: 1
-        steps: 2000  # total number of steps to train 500 - 4000 is a good range
+        steps: 1000  # total number of steps to train 500 - 4000 is a good range
         gradient_accumulation_steps: 1
         train_unet: true
         train_text_encoder: false  # probably won't work with flux
@@ -45,11 +46,11 @@ config:
         optimizer: "adamw8bit"
         lr: 2e-4
         # uncomment this to skip the pre training sample
-#        skip_first_sample: true
+        #skip_first_sample: true
         # uncomment to completely disable sampling
-#        disable_sampling: true
+        #disable_sampling: true
         # uncomment to use new vell curved weighting. Experimental but may produce better results
-#        linear_timesteps: true
+        #linear_timesteps: true
 
         # ema will smooth out learning, but could slow it down. Recommended to leave on.
         ema_config:
@@ -66,12 +67,12 @@ config:
         name_or_path: "black-forest-labs/FLUX.1-dev"
         is_flux: true
         quantize: true  # run 8bit mixed precision
-#        low_vram: true  # uncomment this if the GPU is connected to your monitors. It will use less vram to quantize, but is slower.
+        #low_vram: true  # uncomment this if the GPU is connected to your monitors. It will use less vram to quantize, but is slower.
       sample:
         sampler: "flowmatch" # must match train.noise_scheduler
         sample_every: 250 # sample every this many steps
-        width: 1024
-        height: 1024
+        width: 512
+        height: 512
         prompts:
           # you can add [trigger] to the prompts here and it will be replaced with the trigger word
 #          - "[trigger] holding a sign that says 'I LOVE PROMPTS!'"\
