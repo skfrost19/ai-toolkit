@@ -82,6 +82,10 @@ IMPORTANT. If you press crtl+c while it is saving, it will likely corrupt that c
 - Run `pip install modal` to install the modal Python package.
 - Run `modal setup` to authenticate (if this doesn’t work, try `python -m modal setup`).
 
+------------OR---------------
+
+**Use the given txt file to setup the modal.**
+
 #### Hugging Face:
 - Get a READ token from [here](https://huggingface.co/settings/tokens) and request access to Flux.1-dev model from [here](https://huggingface.co/black-forest-labs/FLUX.1-dev).
 - Add a `.env` in the root directory with `HF_TOKEN=your_token`.
